@@ -1,0 +1,79 @@
+﻿@page "/"
+@rendermode InteractiveServer
+
+<big>Try typing the sentence below as fast as you can!</big>
+<p><code>@CorrectSentence</code></p>
+<MudInput @bind-Value="UserInput" @oninput="OnInputChanged" @onkeydown="OnKeyDown" Variant="Variant.Outlined" />
+
+@if (!string.IsNullOrEmpty(UserInput) || ElapsedTime.HasValue)
+{
+    <p>@ResultMessage</p>
+}
+
+@if (UserInput == CorrectSentence)
+{
+
+    @if (ElapsedTime.HasValue)
+    {
+        <p>Time taken: @ElapsedTime.Value.TotalSeconds.ToString("F2") seconds</p>
+        <p>Words Per Minute: @((GetWordCount() / (ElapsedTime.Value.TotalSeconds / 60)).ToString("F1"))</p>
+    }
+    <p>Mistakes: @mistakes</p>
+}
+
+@code {
+    private const string CorrectSentence = "the quick brown fox jumps over the lazy dog";
+    private string UserInput = string.Empty;
+    private string ResultMessage => UserInput == CorrectSentence ? "✅ Matched!" : "❌ Keep Typing...";
+
+    private DateTime? StartTime;
+    private DateTime? EndTime;
+    private TimeSpan? ElapsedTime;
+
+    private float Wordcount = 0;
+    private int count = 0;
+    private int mistakes = 0;
+
+    private int GetWordCount()
+    {
+        return CorrectSentence.Split(' ', StringSplitOptions.RemoveEmptyEntries).Length;
+    }
+
+    private void OnInputChanged(ChangeEventArgs e)
+    {
+        UserInput = e.Value?.ToString() ?? string.Empty;
+
+        if (string.IsNullOrEmpty(UserInput))
+        {
+            StartTime = null;
+            EndTime = null;
+            ElapsedTime = null;
+            mistakes = 0;
+            count = 0;
+        }
+        else
+        {
+            if (StartTime == null)
+            {
+                StartTime = DateTime.Now;
+            }
+            if (UserInput == CorrectSentence && EndTime == null && StartTime != null)
+            {
+                EndTime = DateTime.Now;
+                ElapsedTime = EndTime - StartTime;
+            }
+        }
+        StateHasChanged();
+    }
+
+    private void OnKeyDown(KeyboardEventArgs e)
+    {
+        if (!string.IsNullOrEmpty(UserInput) && UserInput.Length <= CorrectSentence.Length)
+        {
+            if (UserInput != CorrectSentence.Substring(0, UserInput.Length))
+            {
+                mistakes++;
+            }
+        }
+    }
+}
