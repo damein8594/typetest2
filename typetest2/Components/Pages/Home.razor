@@ -2,23 +2,44 @@
 @rendermode InteractiveServer
 
 <big>Try typing the sentence below as fast as you can!</big>
-<p><code>@CorrectSentence</code></p>
-<MudInput @bind-Value="UserInput" @oninput="OnInputChanged" @onkeydown="OnKeyDown" Variant="Variant.Outlined" />
-
-@if (!string.IsNullOrEmpty(UserInput) || ElapsedTime.HasValue)
+<p>
+@for (int i = 0; i < CorrectSentence.Length; i++)
 {
-    <p>@ResultMessage</p>
+    char c = CorrectSentence[i];
+    string style = i < UserInput.Length
+        ? (UserInput[i] == c ? "color:green;" : "color:red;")
+        : "color:gray;";
+    <span style="@style">@c</span>
 }
+</p>
 
-@if (UserInput == CorrectSentence)
+<MudProgressLinear Value="@ProgressPercent" Color="Color.Primary" Style="margin-bottom:10px;" />
+
+<MudInput @bind-Value="UserInput"
+          @onkeydown="OnKeyDown"
+          Variant="Variant.Outlined"
+          Disabled="@IsCompleted"
+          Placeholder="Start typing here..."
+          aria-label="Typing input" />
+
+@if (IsCompleted)
 {
-
     @if (ElapsedTime.HasValue)
     {
         <p>Time taken: @ElapsedTime.Value.TotalSeconds.ToString("F2") seconds</p>
         <p>Words Per Minute: @((GetWordCount() / (ElapsedTime.Value.TotalSeconds / 60)).ToString("F1"))</p>
     }
+    else
+    {
+        <p>Calculating time...</p>
+    }
     <p>Mistakes: @mistakes</p>
+    <MudButton OnClick="ResetTest" Variant="Variant.Filled" Color="Color.Secondary">Try Again</MudButton>
+}
+else
+{
+    <p>@ResultMessage</p>
+    <MudButton OnClick="ResetTest" Variant="Variant.Outlined" Color="Color.Secondary">Restart</MudButton>
 }
 
 @code {
@@ -27,53 +48,66 @@
     private string ResultMessage => UserInput == CorrectSentence ? "✅ Matched!" : "❌ Keep Typing...";
 
     private DateTime? StartTime;
-    private DateTime? EndTime;
     private TimeSpan? ElapsedTime;
 
-    private float Wordcount = 0;
-    private int count = 0;
     private int mistakes = 0;
+    private bool IsCompleted => UserInput == CorrectSentence;
+
+    private double ProgressPercent =>
+        100.0 * Math.Min(UserInput.Length, CorrectSentence.Length) / CorrectSentence.Length;
 
     private int GetWordCount()
     {
         return CorrectSentence.Split(' ', StringSplitOptions.RemoveEmptyEntries).Length;
     }
 
-    private void OnInputChanged(ChangeEventArgs e)
-    {
-        UserInput = e.Value?.ToString() ?? string.Empty;
-
-        if (string.IsNullOrEmpty(UserInput))
-        {
-            StartTime = null;
-            EndTime = null;
-            ElapsedTime = null;
-            mistakes = 0;
-            count = 0;
-        }
-        else
-        {
-            if (StartTime == null)
-            {
-                StartTime = DateTime.Now;
-            }
-            if (UserInput == CorrectSentence && EndTime == null && StartTime != null)
-            {
-                EndTime = DateTime.Now;
-                ElapsedTime = EndTime - StartTime;
-            }
-        }
-        StateHasChanged();
-    }
-
     private void OnKeyDown(KeyboardEventArgs e)
     {
-        if (!string.IsNullOrEmpty(UserInput) && UserInput.Length <= CorrectSentence.Length)
+        // Only count mistakes for character keys and if not completed
+        if (!IsCompleted && !string.IsNullOrEmpty(UserInput) && UserInput.Length <= CorrectSentence.Length)
         {
-            if (UserInput != CorrectSentence.Substring(0, UserInput.Length))
+            // Only count if the key is a single character (ignores Shift, Ctrl, etc.)
+            if (!string.IsNullOrEmpty(e.Key) && e.Key.Length == 1)
             {
-                mistakes++;
+                int idx = UserInput.Length - 1;
+                if (idx >= 0 && UserInput[idx] != CorrectSentence[idx])
+                {
+                    mistakes++;
+                }
             }
         }
     }
+
+    private void ResetTest()
+    {
+        UserInput = string.Empty;
+        StartTime = null;
+        ElapsedTime = null;
+        mistakes = 0;
+    }
+    
+    private async Task OnInputChanged(string newInput)
+    {
+        // Start timer when user starts typing (first non-empty input)
+        if (StartTime == null && !string.IsNullOrEmpty(newInput))
+        {
+            StartTime = DateTime.Now;
+            ElapsedTime = null;
+            mistakes = 0;
+        }
+
+        // Only allow up to the length of the correct sentence
+        if (newInput.Length > CorrectSentence.Length)
+            newInput = newInput.Substring(0, CorrectSentence.Length);
+
+        UserInput = newInput;
+
+        // Stop timer and update output immediately when user finishes typing correctly
+        if (UserInput == CorrectSentence && StartTime != null && !ElapsedTime.HasValue)
+        {
+            ElapsedTime = DateTime.Now - StartTime.Value;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
 }
