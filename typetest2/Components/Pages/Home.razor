@@ -1,22 +1,28 @@
 ﻿@page "/"
 @rendermode InteractiveServer
 
+@using Microsoft.AspNetCore.Components.Web
+@using MudBlazor
+
 <big>Try typing the sentence below as fast as you can!</big>
+
 <p>
-@for (int i = 0; i < CorrectSentence.Length; i++)
-{
-    char c = CorrectSentence[i];
-    string style = i < UserInput.Length
+    @for (int i = 0; i < CorrectSentence.Length; i++)
+    {
+        char c = CorrectSentence[i];
+        string style = i < UserInput.Length
         ? (UserInput[i] == c ? "color:green;" : "color:red;")
         : "color:gray;";
-    <span style="@style">@c</span>
-}
+        <span style="@style">@c</span>
+    }
 </p>
 
 <MudProgressLinear Value="@ProgressPercent" Color="Color.Primary" Style="margin-bottom:10px;" />
 
-<MudInput @bind-Value="UserInput"
-          @onkeydown="OnKeyDown"
+<MudInput T="string"
+          Value="@UserInput"
+          ValueChanged="@OnInputChanged"
+          Immediate="true"
           Variant="Variant.Outlined"
           Disabled="@IsCompleted"
           Placeholder="Start typing here..."
@@ -45,12 +51,12 @@ else
 @code {
     private const string CorrectSentence = "the quick brown fox jumps over the lazy dog";
     private string UserInput = string.Empty;
-    private string ResultMessage => UserInput == CorrectSentence ? "✅ Matched!" : "❌ Keep Typing...";
 
     private DateTime? StartTime;
     private TimeSpan? ElapsedTime;
-
     private int mistakes = 0;
+
+    private string ResultMessage => UserInput == CorrectSentence ? "✅ Matched!" : "❌ Keep Typing...";
     private bool IsCompleted => UserInput == CorrectSentence;
 
     private double ProgressPercent =>
@@ -61,20 +67,34 @@ else
         return CorrectSentence.Split(' ', StringSplitOptions.RemoveEmptyEntries).Length;
     }
 
-    private void OnKeyDown(KeyboardEventArgs e)
+    private async Task OnInputChanged(string newValue)
     {
-        // Only count mistakes for character keys and if not completed
-        if (!IsCompleted && !string.IsNullOrEmpty(UserInput) && UserInput.Length <= CorrectSentence.Length)
+        if (StartTime == null && !string.IsNullOrEmpty(newValue))
         {
-            // Only count if the key is a single character (ignores Shift, Ctrl, etc.)
-            if (!string.IsNullOrEmpty(e.Key) && e.Key.Length == 1)
+            StartTime = DateTime.Now;
+            ElapsedTime = null;
+            mistakes = 0;
+        }
+
+        if (newValue.Length > CorrectSentence.Length)
+            newValue = newValue[..CorrectSentence.Length];
+
+        int oldLength = UserInput.Length;
+        if (newValue.Length > oldLength)
+        {
+            int i = oldLength;
+            if (i < CorrectSentence.Length && newValue[i] != CorrectSentence[i])
             {
-                int idx = UserInput.Length - 1;
-                if (idx >= 0 && UserInput[idx] != CorrectSentence[idx])
-                {
-                    mistakes++;
-                }
+                mistakes++;
             }
+        }
+
+        UserInput = newValue;
+
+        if (UserInput == CorrectSentence && StartTime != null && !ElapsedTime.HasValue)
+        {
+            ElapsedTime = DateTime.Now - StartTime.Value;
+            await InvokeAsync(StateHasChanged);
         }
     }
 
@@ -85,29 +105,4 @@ else
         ElapsedTime = null;
         mistakes = 0;
     }
-    
-    private async Task OnInputChanged(string newInput)
-    {
-        // Start timer when user starts typing (first non-empty input)
-        if (StartTime == null && !string.IsNullOrEmpty(newInput))
-        {
-            StartTime = DateTime.Now;
-            ElapsedTime = null;
-            mistakes = 0;
-        }
-
-        // Only allow up to the length of the correct sentence
-        if (newInput.Length > CorrectSentence.Length)
-            newInput = newInput.Substring(0, CorrectSentence.Length);
-
-        UserInput = newInput;
-
-        // Stop timer and update output immediately when user finishes typing correctly
-        if (UserInput == CorrectSentence && StartTime != null && !ElapsedTime.HasValue)
-        {
-            ElapsedTime = DateTime.Now - StartTime.Value;
-            await InvokeAsync(StateHasChanged);
-        }
-    }
-
 }
