@@ -11,8 +11,8 @@
     {
         char c = CorrectSentence[i];
         string style = i < UserInput.Length
-        ? (UserInput[i] == c ? "color:green;" : "color:red;")
-        : "color:gray;";
+            ? (UserInput[i] == c ? "color:green;" : "color:red;")
+            : "color:gray;";
         <span style="@style">@c</span>
     }
 </p>
@@ -40,7 +40,11 @@
         <p>Calculating time...</p>
     }
     <p>Mistakes: @mistakes</p>
-    <MudButton OnClick="ResetTest" Variant="Variant.Filled" Color="Color.Secondary">Try Again</MudButton>
+
+    <p><b>Improvement:</b> @ImprovementMessage</p>
+    <p><b>Common error positions:</b> @CommonErrorPositions</p>
+
+    <MudButton OnClick="ResetTest" Variant="Variant.Filled" Color="Color.Secondary" Class="mt-3">Try Again</MudButton>
 }
 else
 {
@@ -62,10 +66,18 @@ else
     private double ProgressPercent =>
         100.0 * Math.Min(UserInput.Length, CorrectSentence.Length) / CorrectSentence.Length;
 
-    private int GetWordCount()
-    {
-        return CorrectSentence.Split(' ', StringSplitOptions.RemoveEmptyEntries).Length;
-    }
+    private int GetWordCount() =>
+        CorrectSentence.Split(' ', StringSplitOptions.RemoveEmptyEntries).Length;
+
+    // Store previous results simply
+    private TimeSpan? PreviousTime;
+    private int? PreviousMistakes;
+
+    // Error position counts
+    private Dictionary<int, int> ErrorCounts = new();
+
+    private string ImprovementMessage = "No previous data.";
+    private string CommonErrorPositions = "No errors yet.";
 
     private async Task OnInputChanged(string newValue)
     {
@@ -91,10 +103,70 @@ else
 
         UserInput = newValue;
 
-        if (UserInput == CorrectSentence && StartTime != null && !ElapsedTime.HasValue)
+        if (IsCompleted && StartTime != null && !ElapsedTime.HasValue)
         {
             ElapsedTime = DateTime.Now - StartTime.Value;
+
+            // Analyze improvement compared to last
+            AnalyzeImprovement();
+
+            // Record error positions for this round
+            RecordErrorPositions();
+
             await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private void AnalyzeImprovement()
+    {
+        if (PreviousTime == null || PreviousMistakes == null)
+        {
+            ImprovementMessage = "First attempt recorded.";
+        }
+        else
+        {
+            bool faster = ElapsedTime < PreviousTime;
+            bool fewerMistakes = mistakes < PreviousMistakes;
+
+            if (faster && fewerMistakes)
+                ImprovementMessage = "Great! Faster and fewer mistakes.";
+            else if (faster)
+                ImprovementMessage = "Faster but watch mistakes.";
+            else if (fewerMistakes)
+                ImprovementMessage = "Fewer mistakes but try to speed up.";
+            else
+                ImprovementMessage = "No improvement detected yet.";
+        }
+
+        PreviousTime = ElapsedTime;
+        PreviousMistakes = mistakes;
+    }
+
+    private void RecordErrorPositions()
+    {
+        for (int i = 0; i < UserInput.Length; i++)
+        {
+            if (UserInput[i] != CorrectSentence[i])
+            {
+                if (ErrorCounts.ContainsKey(i))
+                    ErrorCounts[i]++;
+                else
+                    ErrorCounts[i] = 1;
+            }
+        }
+
+        if (ErrorCounts.Count == 0)
+        {
+            CommonErrorPositions = "No errors yet.";
+        }
+        else
+        {
+            var topErrors = ErrorCounts
+                .OrderByDescending(kv => kv.Value)
+                .Take(3)
+                .Select(kv => $"{kv.Key} ('{CorrectSentence[kv.Key]}'): {kv.Value} times");
+
+            CommonErrorPositions = string.Join(", ", topErrors);
         }
     }
 
@@ -104,5 +176,7 @@ else
         StartTime = null;
         ElapsedTime = null;
         mistakes = 0;
+        ImprovementMessage = PreviousTime == null ? "No previous data." : ImprovementMessage;
+        // We keep PreviousTime, PreviousMistakes, and ErrorCounts across rounds for ongoing analysis
     }
 }
