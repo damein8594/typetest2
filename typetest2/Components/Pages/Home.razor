@@ -1,6 +1,9 @@
 ﻿@page "/"
 @rendermode InteractiveServer
 
+@inject NavigationManager UriHelper
+
+@using System.IO
 @using Microsoft.AspNetCore.Components.Web
 @using MudBlazor
 
@@ -26,10 +29,12 @@
           Variant="Variant.Outlined"
           Disabled="@IsCompleted"
           Placeholder="Start typing here..."
-          aria-label="Typing input" />
+          aria-label="Typing input"
+          Style="width: 500px;" />
 
 @if (IsCompleted)
 {
+    <MudButton OnClick="@GoToScoreboard" Variant="Variant.Filled" Color="Color.Primary" Class="mb-2">Go to Scoreboard</MudButton>
     @if (ElapsedTime.HasValue)
     {
         <p>Time taken: @ElapsedTime.Value.TotalSeconds.ToString("F2") seconds</p>
@@ -52,10 +57,50 @@ else
     <MudButton OnClick="ResetTest" Variant="Variant.Outlined" Color="Color.Secondary">Restart</MudButton>
 }
 
+<div style="display: flex; flex-direction: column; align-items: center; margin-top: 24px;">
+    <MudButton OnClick="ShowFileContent" Variant="Variant.Outlined" Color="Color.Info">Show Scoreboard</MudButton>
+</div>
+
+@if (scores.Keys.Count != 0)
+{
+    <p>
+
+    </p>
+    <big>Scoreboard:</big>
+    @foreach(string name in scores.Keys)
+    {
+        <div style="font-size: 1.5em;">@name : @scores[name]</div>
+    }
+}
+
 @code {
-    private const string CorrectSentence = "the quick brown fox jumps over the lazy dog";
+    [Inject] private NavigationManager Navigation { get; set; } = default!;
+           
+    private static readonly List<string> Sentences = new()
+    {
+        "the quick brown fox jumps over the lazy dog",
+        "pack my box with five dozen liquor jugs",
+        "how vexingly quick daft zebras jump",
+        "bright vixens jump dozy fowl quack",
+        "sphinx of black quartz judge my vow",
+        "the five boxing wizards jump quickly",
+        "crazy fredrick bought many very exquisite opal jewels",
+        "we promptly judged antique ivory buckles for the next prize",
+        "just keep examining every low bid quoted for zinc etchings",
+        "quick zephyrs blow vexing daft jim"
+    };
+
+    private string CorrectSentence = string.Empty;
     private string UserInput = string.Empty;
 
+    protected override void OnInitialized()
+    {
+        var rng = new Random();
+        int idx = rng.Next(Sentences.Count);
+        CorrectSentence = Sentences[idx];
+        base.OnInitialized();
+    }
+           
     private DateTime? StartTime;
     private TimeSpan? ElapsedTime;
     private int mistakes = 0;
@@ -69,15 +114,19 @@ else
     private int GetWordCount() =>
         CorrectSentence.Split(' ', StringSplitOptions.RemoveEmptyEntries).Length;
 
-    // Store previous results simply
+    // Store previous results 
     private TimeSpan? PreviousTime;
     private int? PreviousMistakes;
 
     // Error position counts
     private Dictionary<int, int> ErrorCounts = new();
 
+    private Dictionary<string, float> scores = new();
+
     private string ImprovementMessage = "No previous data.";
     private string CommonErrorPositions = "No errors yet.";
+
+    private string FileContent = string.Empty;
 
     private async Task OnInputChanged(string newValue)
     {
@@ -105,12 +154,9 @@ else
 
         if (IsCompleted && StartTime != null && !ElapsedTime.HasValue)
         {
-            ElapsedTime = DateTime.Now - StartTime.Value;
+            ElapsedTime = DateTime.Now - StartTime.Value;            
 
-            // Analyze improvement compared to last
             AnalyzeImprovement();
-
-            // Record error positions for this round
             RecordErrorPositions();
 
             await InvokeAsync(StateHasChanged);
@@ -168,7 +214,7 @@ else
 
             CommonErrorPositions = string.Join(", ", topErrors);
         }
-    }
+    }    
 
     private void ResetTest()
     {
@@ -177,6 +223,27 @@ else
         ElapsedTime = null;
         mistakes = 0;
         ImprovementMessage = PreviousTime == null ? "No previous data." : ImprovementMessage;
-        // We keep PreviousTime, PreviousMistakes, and ErrorCounts across rounds for ongoing analysis
+    }
+
+    private void GoToScoreboard()
+    {
+        var elapsedSeconds = ElapsedTime.HasValue ? ElapsedTime.Value.TotalSeconds : 0;
+        UriHelper.NavigateTo($"Scoreboard/{elapsedSeconds}");        
+    }
+
+    private void ShowFileContent()
+    {
+        string readText = File.ReadAllText("scoreboard.txt");
+        FileContent = readText;
+
+        scores = new Dictionary<string, float>();
+
+        string[] lines = FileContent.Split("\n");
+        foreach (string line in lines)
+        {
+            string[] lineSplit = line.Split(": ");
+            scores[lineSplit[0]] = float.Parse(lineSplit[1]);
+        }
+        scores = scores.OrderBy(pair => pair.Value).ToDictionary(pair => pair.Key, pair => pair.Value);
     }
 }

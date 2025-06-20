@@ -1,0 +1,57 @@
+﻿@page "/Scoreboard/{elapsedSeconds}"
+@rendermode InteractiveServer
+
+
+@using System.IO
+
+<big> Please read before saving </big>
+<p>
+    This page is for saving your typing test results.
+    If you save, your results will be recorded and will be available to see by everyone.
+    Please ensure that you are okay with your results being public.
+</p>
+
+<MudTextField @bind-Value="userName" Label="Your Name" Variant="Variant.Outlined" Margin="Margin.Normal" />
+
+<MudButton Variant="Variant.Outlined" OnClick="@OnSaveClicked">
+    Save
+</MudButton>
+
+<MudButton Variant="Variant.Outlined" OnClick="@OnDontSaveClicked">
+    Don't save
+</MudButton>
+
+@if (showErrorMessage)
+{
+    <p>Please enter your name.</p>
+}
+
+@code {
+    private string userName = string.Empty;
+    private bool showErrorMessage = false;
+    @inject NavigationManager NavigationManager
+    [Parameter]
+    public string? elapsedSeconds { get; set; } // Made nullable to avoid CS8618
+
+    private void OnSaveClicked()
+    {
+        if (string.IsNullOrWhiteSpace(userName))
+        {
+            showErrorMessage = true;
+        }
+        else
+        {
+            showErrorMessage = false;
+            double secs;
+            var scoreLine = $"\n{userName}: {(double.TryParse(elapsedSeconds, out secs) ? secs.ToString("F2") : "0.00")}";
+            File.AppendAllText("scoreboard.txt", scoreLine);
+            NavigationManager.NavigateTo("/");
+        }
+    }
+
+    private void OnDontSaveClicked()
+    {
+        NavigationManager.NavigateTo("/");
+}
+    
+}
